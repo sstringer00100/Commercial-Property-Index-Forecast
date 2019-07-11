@@ -1,0 +1,302 @@
+---
+title: "5 Year Forecast of Commercial Real Estate Price Index"
+author: "Steven Stringer"
+date: "July 10, 2019"
+output: html_document
+---
+
+# 5 Year Forecast of the Commercial Real Estate Price Index  
+
+
+## Set the work directory that contains the data 
+
+```{r}
+setwd('C:\\Users\\Steven\\Desktop\\Economic Data')
+```
+
+
+## Read the datasets and assign variables 
+
+```{r message=FALSE}
+library(readxl)
+com_real <- read_excel('GREENSTREETINDEX_UNADJ.xlsx', sheet = 2, col_names = TRUE, skip = 9)  
+
+DPI <- read_excel('REALUSDPI2018_SADJ.xls', col_names = TRUE, skip = 10)  
+
+CPI <- read_excel('USCPI2018_UNADJ.xls', col_names = TRUE, skip = 10)  
+
+GDP <- read_excel('USGDP2018_SADJ.xls', col_names = TRUE, skip = 10)  
+
+INT <- read_excel('USINT2018_UNADJ.xls', col_names = TRUE, skip = 10)  
+
+MAN <- read_excel('USMAN2018_SADJ.xls', col_names = TRUE, skip = 10)  
+
+EMP <- read_excel('USUNEMP2018_SADJ.xls', col_names = TRUE, skip = 10)
+```
+
+*2012 = 100 for the Index* 
+
+
+## Remove unnecessary variables and rename columns 
+
+```{r}
+com_real <- read_excel('GREENSTREETINDEX_UNADJ.xlsx', sheet = 2, col_names = TRUE, skip = 9)  
+
+DPI <- read_excel('REALUSDPI2018_SADJ.xls', col_names = TRUE, skip = 10)  
+
+CPI <- read_excel('USCPI2018_UNADJ.xls', col_names = TRUE, skip = 10)  
+
+GDP <- read_excel('USGDP2018_SADJ.xls', col_names = TRUE, skip = 10)  
+
+INT <- read_excel('USINT2018_UNADJ.xls', col_names = TRUE, skip = 10)  
+
+MAN <- read_excel('USMAN2018_SADJ.xls', col_names = TRUE, skip = 10)  
+
+EMP <- read_excel('USUNEMP2018_SADJ.xls', col_names = TRUE, skip = 10)
+```
+
+*2012 = 100 for the Index*  
+
+#### Remove columns and Rename columns  
+
+```{r echo=FALSE, message=FALSE}
+# Market Index  
+com_real$"All Property" <- NULL
+colnames(com_real)[colnames(com_real)=="Core Sector"] <- "IND"
+colnames(com_real)
+
+# Disposable Personal Income (DPI)  
+colnames(DPI)[colnames(DPI)=="observation_date"] <- "Date"
+colnames(DPI)[colnames(DPI)=="A229RX0Q048SBEA"] <- "DPI"
+colnames(DPI)
+
+# Consumer Price Index: All Goods (CPI)  
+colnames(CPI)[colnames(CPI)=="observation_date"] <- "Date"
+colnames(CPI)[colnames(CPI)=="CPALTT01USQ657N"] <- "CPI"
+colnames(CPI)
+
+# Gross Domestic Product (GDP)  
+colnames(GDP)[colnames(GDP)=="observation_date"] <- "Date"
+#colnames(GDP)[colnames(GDP)=="GDP"] <- "GDP"
+colnames(GDP)
+
+# Federal Interest Reate (FED)  
+colnames(INT)[colnames(INT)=="observation_date"] <- "Date"
+colnames(INT)[colnames(INT)=="FEDFUNDS"] <- "FED"
+colnames(INT)
+
+# Industrial Production: Manufacturing (MAN)  
+colnames(MAN)[colnames(MAN)=="observation_date"] <- "Date"
+colnames(MAN)[colnames(MAN)=="IPGMFSQ"] <- "MAN"
+colnames(MAN)
+
+# Unemployment Rate (EMP)  
+colnames(EMP)[colnames(EMP)=="observation_date"] <- "Date"
+colnames(EMP)[colnames(EMP)=="UNRATE"] <- "EMP"
+colnames(EMP)
+```
+
+
+## Convert all data frames to time series objects and convert monthly data into quarterly data
+
+```{r message=FALSE}
+
+library(forecast)
+
+# Monthly to quarterly  
+COMREAL_MONTHLY_TS <- ts(com_real, start=1998, frequency = 12)
+COMREAL_TS <- aggregate(COMREAL_MONTHLY_TS[, "MAN"], FUN = "mean", nfrequency=4)
+
+DPI_TS <- ts(DPI[, "DPI"], start=c(1947, 1), frequency = 4)
+
+CPI_TS <- ts(CPI[, "CPI"], start=c(1960,1), frequency = 4)
+
+GDP_TS <- ts(GDP[, "GDP"], start=c(1947, 1), frequency = 4)
+
+INT_MONTHLY_TS <- ts(INT, start=c(1954, 7), frequency = 12)
+INT_TS <- aggregate(INT_MONTHLY_TS[, "FED"], FUN = "mean", nfrequency=4)
+
+MAN_TS <- ts(MAN[, "MAn"], start=c(1972, 1), frequency = 4)
+
+EMP_MONTHLY_TS <- ts(EMP, start=1948, frequency = 12)
+EMP_TS <- aggregate(EMP_MONTHLY_TS[, "EMP"],FUN = "mean", nfrequency=4)
+```
+
+
+## Subset the time series to match the date range of the Index series  
+ *Index series begins Q1 of 1998 and ends Q4 of 2018, but all other series only extend to 2018 Q3*
+ 
+```{r}
+COMREAL_SUB <- window(COMREAL_TS, start=c(1998,1), end=c(2018,3))
+
+DPI_SUB <- window(DPI_TS, start=c(1998,1), end=c(2018,3))
+
+CPI_SUB <- window(CPI_TS, start=c(1998,1), end=c(2018,3))
+
+GDP_SUB <- window(GDP_TS, start=c(1998,1), end=c(2018,3))
+
+INT_SUB <- window(INT_TS, start=c(1998,1), end=c(2018,3))
+
+MAN_SUB <- window(MAN_TS, start=c(1998,1), end=c(2018,3))
+
+EMP_SUB <- window(EMP_TS, start=c(1998,1), end=c(2018,3))
+```
+
+
+## Seasonally adjust the unadjusted data
+#### CPI and the FED are the only time series that haven't been seasonally adjusted. The Federal Interest rate isn't typically adjsuted, so we'll leave it unadjsuted.     
+
+```{r echo=FALSE,message=FALSE}
+library(ggplot2)
+library(seasonal)
+
+# View the decomposed timeseries 
+CPI_SUB %>% decompose(type="additive") %>%
+  autoplot() + xlab("Year") +
+  ggtitle("Classical Additive Decomposition
+          of CPI")  
+
+# X11 is generally a better decomposition for economic data
+CPI_SUB %>% seas(x11="") -> CPI_X11
+autoplot(CPI_X11) +
+  ggtitle("X11 Decomposition of CPI")
+```
+
+
+## The CPI dataset relfects a strong seasonal component that needs to be eliminated before fitting a regression model
+
+```{r echo=FALSE, fig.width=10}
+autoplot(CPI_SUB, series="Data") +
+  autolayer(trendcycle(CPI_X11), series="Trend") +
+  autolayer(seasadj(CPI_X11), series="Seasonally Adjusted") +
+  xlab("Year") + ylab("Consumer Price Index") +
+  ggtitle("CPI Component Comparison") +
+  scale_colour_manual(values=c("gray","blue","red"),
+                      breaks=c("Data","Seasonally Adjusted","Trend"))  
+
+CPI_SADJ <- seasadj(CPI_X11)
+```
+
+## Combine all the cleaned datasets to train the model
+
+```{r}
+MODEL_SET <- ts.union(COMREAL_SUB, DPI_SUB, CPI_SADJ, GDP_SUB, INT_SUB, MAN_SUB, EMP_SUB)
+```
+
+
+## Rename the columns 
+
+```{r}
+colnames(MODEL_SET) <- c("IND","DPI","CPI","GDP","FED","MAN","EMP")
+colnames(MODEL_SET)
+```
+
+
+## View the correlation between the predictor variables and the dependent variable
+
+```{r echo=FALSE, message=FALSE}
+MODEL_SET %>%
+  as.data.frame() %>%
+  GGally::ggpairs()  
+```
+
+## Create a correlation matrix to better visualize the relationships
+
+```{r echo=FALSE, message=FALSE}
+library(ggcorrplot)
+ggcorrplot(cor(MODEL_SET))           
+```
+#### Both Unemployment, the Federal Interest Rate, and Consumer Price Index have a low correlation with the dependent variable, the Real Estate Index. We'll drop the variables since there is such low correlation. 
+
+
+## Split the data 80% for the traning set and 20% test for the test set for model validation
+
+```{r}
+trainData <- window(MODEL_SET, start=c(1998,1), end=c(2014, 1))
+testData <- window(MODEL_SET, start=c(2014, 2), end=c(2018, 3))
+```
+
+## Fit the training data to a multiple regression model 
+
+```{r}
+fit1 <- tslm(IND ~ DPI + GDP + MAN, data = trainData)
+summary(fit1)
+```
+
+## Plot the fitted model against the historical data 
+
+```{r echo=FALSE, fig.width=10}
+autoplot(trainData[, "IND"], series="Historical Data") +
+  autolayer(fitted(fit1), series="Fitted Model") +
+  xlab("Year") + ylab("") +
+  ggtitle("Commercial Real Estate Price Index") +
+  guides(colour=guide_legend(title=" "))  
+
+```
+
+##  A Random Walk for predictors
+
+#### For testing the predictor variables, we'll take the previous 18 lags of real data and use a Random Walk with Drift (RWF) forecast to predict the variables for those 18 periods. The RWF model for the previous 18 periods extrapolates the average change present in the data. We take that average change and use it to make the final forecast.
+
+```{r}
+#RWF Forecast for the predictors  
+dpiData <- rwf(trainData[, 'DPI'], h=18, drift=TRUE)
+gdpData <- rwf(trainData[, 'GDP'], h=18, drift=TRUE)
+manData <- rwf(trainData[, 'MAN'], h=18, drift=TRUE)
+View(dpiData)
+
+```
+
+## RFW coefficients into a dataframe
+
+```{r}
+# Create a dataframe from the forecasted preditors and then create the forecast of the Index
+DPI <- dpiData$mean
+GDP <- gdpData$mean
+MAN <- manData$mean
+newdata1 <- data.frame(cbind(DPI, GDP, MAN)) 
+newdata1 <- newdata1[-c(1),]
+View(newdata1)
+
+```
+
+## Next, we'll produce the forecast
+
+```{r}
+fCast <- forecast(fit1, h=18, newdata = newdata1) 
+View(fCast)
+```
+
+## Check the residuals
+
+```{r}
+window(fCast, start=c(2014, 2), end=c(2018, 3))
+#accuracy(fCast$fitted, testData)
+```
+
+
+## Validate the model against the test data
+
+
+
+```{r}
+newdata1 <- data.frame(
+  Unemployment = c(6.698438, 6.730209, 6.76198, 6.79375, 6.825521, 6.857292, 6.889063, 6.920834, 6.952605, 6.984375, 7.016146, 7.047917, 7.079688, 7.111459, 7.14323, 7.175, 7.206771, 7.238542), 
+  Manufacturing = c(101.4709, 101.716, 101.961, 102.2061, 102.4511, 102.6962, 102.9412, 103.1863, 103.4313, 103.6764, 103.9214, 104.1665, 104.4115, 104.6566, 104.9016, 105.1467, 105.3917, 105.6368),
+  GDP = c(17231.63, 17360.32, 17489.02, 17617.71, 17746.4, 17875.1, 18003.79, 18132.49, 18261.18, 18389.88, 18518.57, 18647.27, 18775.96, 18904.66, 19033.35, 19162.04, 19290.74, 19419.43),
+  CPI = c(0.6414956, 0.6488552, 0.6562147, 0.6635743, 0.6709338, 0.6782934, 0.685653, 0.6930125, 0.7003721, 0.7077316, 0.7150912, 0.7224507, 0.7298103, 0.7371699, 0.7445294, 0.751889, 0.7592485, 0.7666081))  
+
+fitRFW <- tslm(Market ~ CPI + GDP + Manufacturing + Unemployment, data = trainData)  
+
+rwfcast <-  forecast(fitRFW, newdata = newdata1)  
+
+```
+
+
+
+
+
+
+
+
+
